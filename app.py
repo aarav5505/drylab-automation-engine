@@ -119,7 +119,64 @@ def compare_dna_sequences(seq1, seq2):
 # 👇 ADD NEW BACKEND FUNCTIONS BELOW THIS LINE (FOR FUTURE FEATURES)
 # -------------------------------------------------------------
 
-
+def resolve_target_and_rank_grnas(organism_name, gene_keyword, user_email, top_n=5):
+    Entrez.email = user_email
+    search_query = f"{organism_name}[Organism] AND {gene_keyword}[Gene/Title]"
+    try:
+        handle = Entrez.esearch(db="nucleotide", term=search_query, retmax=1)
+        search_results = Entrez.read(handle)
+        handle.close()
+    except Exception as e:
+        return f"Error connecting to NCBI: {str(e)}"
+    
+    id_list = search_results.get("IdList", [])
+    if not id_list:
+        return f"Error: No sequence records found for '{organism_name}' with keyword '{gene_keyword}'."
+    
+    accession_id = id_list[0]
+    handle = Entrez.efetch(db="nucleotide", id=accession_id, rettype="fasta", retmode="text")
+    lines = handle.read().strip().split("\n")
+    handle.close()
+    
+    sequence = "".join(lines[1:])
+    pattern = r'(?=([ATCGA-Z]{20}[ATCGA-Z]GG))'
+    scored_candidates = []
+    
+    for match in re.finditer(pattern, sequence):
+        full_site = match.group(1)
+        grna = full_site[:20]
+        pam = full_site[20:]
+        gc_pct = ((grna.count('G') + grna.count('C')) / 20) * 100
+        
+        score = 100
+        flags = []
+        if gc_pct < 40 or gc_pct > 60:
+            score -= 30
+            flags.append(f"Suboptimal GC ({gc_pct:.1f}%)")
+        if "TTTT" in grna:
+            score -= 40
+            flags.append("TTTT Signal")
+            
+        seed_region = grna[-8:]
+        seed_gc = ((seed_region.count('G') + seed_region.count('C')) / 8) * 100
+        if seed_gc < 37.5:
+            score -= 15
+            flags.append("Low Seed Stability")
+            
+        scored_candidates.append({
+            "Accession": accession_id,
+            "gRNA Sequence": grna,
+            "PAM": pam,
+            "GC Content (%)": round(gc_pct, 1),
+            "Score": max(0, score),
+            "Flags": ", ".join(flags) if flags else "Optimal"
+        })
+        
+    if not scored_candidates:
+        return "No valid CRISPR-Cas9 target sites found in the retrieved locus."
+        
+    scored_candidates.sort(key=lambda x: x['Score'], reverse=True)
+    return scored_candidates[:top_n]
 
 
 # ==========================================
@@ -166,9 +223,21 @@ else:
         st.rerun()
 
     # --- FEATURE 1: CRISPR DISCOVERY ENGINE ---
-    if app_mode == "CRISPR gRNA Discovery":
-        st.title("🧬 CRISPR-Cas9 gRNA Discovery Engine")
-        st.write("Automated sequence retrieval, PAM site scanning, and candidate scoring.")
+    if st.button("Run gRNA Discovery Engine"):
+        with st.spinner("Searching NCBI and scoring targets..."):
+            results = resolve_target_and_rank_grnas(organism, gene, st.session_state.user_email, top_n=5)
+            
+            if isinstance(results, list):
+                st.success(f"Successfully identified and ranked top {len(results)} targets!")
+                
+                # Display Top Guide Metric
+                top_guide = results[0]
+                st.metric("Top Candidate Score", f"{top_guide['Score']}/100")
+                
+                st.subheader("Top Candidate Leaderboard")
+                st.dataframe(results, use_container_width=True)
+            else:
+                st.error(results)
 
         col1, col2 = st.columns(2)
         with col1:
