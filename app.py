@@ -75,50 +75,6 @@ def resolve_target_and_find_best_grna(organism_name, gene_keyword, user_email):
     return scored_candidates[0]
 
 
-def fetch_sequence(organism_name, gene_keyword, user_email):
-    Entrez.email = user_email
-    if gene_keyword.strip():
-        search_query = f"{organism_name}[Organism] AND {gene_keyword}[Gene/Title]"
-    else:
-        search_query = f"{organism_name}[Organism] AND refseq[filter]"
-        
-    try:
-        handle = Entrez.esearch(db="nucleotide", term=search_query, retmax=1)
-        search_results = Entrez.read(handle)
-        handle.close()
-        
-        id_list = search_results.get("IdList", [])
-        if not id_list:
-            return None, f"No sequences found for {organism_name}."
-            
-        accession_id = id_list[0]
-        handle = Entrez.efetch(db="nucleotide", id=accession_id, rettype="fasta", retmode="text")
-        lines = handle.read().strip().split("\n")
-        handle.close()
-        
-        sequence = "".join(lines[1:]).upper()
-        return sequence, accession_id
-    except Exception as e:
-        return None, str(e)
-
-
-def compare_dna_sequences(seq1, seq2):
-    min_len = min(len(seq1), len(seq2))
-    if min_len == 0:
-        return 0.0, 0, 0
-        
-    matches = sum(1 for i in range(min_len) if seq1[i] == seq2[i])
-    similarity_pct = (matches / min_len) * 100
-    
-    gc1 = ((seq1.count('G') + seq1.count('C')) / len(seq1)) * 100
-    gc2 = ((seq2.count('G') + seq2.count('C')) / len(seq2)) * 100
-    
-    return similarity_pct, gc1, gc2
-
-# -------------------------------------------------------------
-# 👇 ADD NEW BACKEND FUNCTIONS BELOW THIS LINE (FOR FUTURE FEATURES)
-# -------------------------------------------------------------
-
 def resolve_target_and_rank_grnas(organism_name, gene_keyword, user_email, top_n=5):
     Entrez.email = user_email
     search_query = f"{organism_name}[Organism] AND {gene_keyword}[Gene/Title]"
@@ -179,6 +135,47 @@ def resolve_target_and_rank_grnas(organism_name, gene_keyword, user_email, top_n
     return scored_candidates[:top_n]
 
 
+def fetch_sequence(organism_name, gene_keyword, user_email):
+    Entrez.email = user_email
+    if gene_keyword.strip():
+        search_query = f"{organism_name}[Organism] AND {gene_keyword}[Gene/Title]"
+    else:
+        search_query = f"{organism_name}[Organism] AND refseq[filter]"
+        
+    try:
+        handle = Entrez.esearch(db="nucleotide", term=search_query, retmax=1)
+        search_results = Entrez.read(handle)
+        handle.close()
+        
+        id_list = search_results.get("IdList", [])
+        if not id_list:
+            return None, f"No sequences found for {organism_name}."
+            
+        accession_id = id_list[0]
+        handle = Entrez.efetch(db="nucleotide", id=accession_id, rettype="fasta", retmode="text")
+        lines = handle.read().strip().split("\n")
+        handle.close()
+        
+        sequence = "".join(lines[1:]).upper()
+        return sequence, accession_id
+    except Exception as e:
+        return None, str(e)
+
+
+def compare_dna_sequences(seq1, seq2):
+    min_len = min(len(seq1), len(seq2))
+    if min_len == 0:
+        return 0.0, 0, 0
+        
+    matches = sum(1 for i in range(min_len) if seq1[i] == seq2[i])
+    similarity_pct = (matches / min_len) * 100
+    
+    gc1 = ((seq1.count('G') + seq1.count('C')) / len(seq1)) * 100
+    gc2 = ((seq2.count('G') + seq2.count('C')) / len(seq2)) * 100
+    
+    return similarity_pct, gc1, gc2
+
+
 # ==========================================
 # SECTION 2: AUTHENTICATION GATE
 # ==========================================
@@ -205,15 +202,11 @@ if not st.session_state.user_authenticated:
 else:
     st.sidebar.write(f"NCBI API User: **{st.session_state.user_email}**")
     
-    # -------------------------------------------------------------
-    # 👇 ADD NEW FEATURE NAMES TO THIS LIST FOR SIDEBAR SELECTION
-    # -------------------------------------------------------------
     app_mode = st.sidebar.radio(
         "Select Feature:",
         [
             "CRISPR gRNA Discovery", 
             "Comparative DNA Alignment"
-            # Add new feature tab titles here!
         ]
     )
     
@@ -223,21 +216,9 @@ else:
         st.rerun()
 
     # --- FEATURE 1: CRISPR DISCOVERY ENGINE ---
-    if st.button("Run gRNA Discovery Engine"):
-        with st.spinner("Searching NCBI and scoring targets..."):
-            results = resolve_target_and_rank_grnas(organism, gene, st.session_state.user_email, top_n=5)
-            
-            if isinstance(results, list):
-                st.success(f"Successfully identified and ranked top {len(results)} targets!")
-                
-                # Display Top Guide Metric
-                top_guide = results[0]
-                st.metric("Top Candidate Score", f"{top_guide['Score']}/100")
-                
-                st.subheader("Top Candidate Leaderboard")
-                st.dataframe(results, use_container_width=True)
-            else:
-                st.error(results)
+    if app_mode == "CRISPR gRNA Discovery":
+        st.title("🧬 CRISPR-Cas9 gRNA Discovery Engine")
+        st.write("Automated sequence retrieval, PAM site scanning, and candidate scoring.")
 
         col1, col2 = st.columns(2)
         with col1:
@@ -247,20 +228,18 @@ else:
 
         if st.button("Run gRNA Discovery Engine"):
             with st.spinner("Searching NCBI and scoring targets..."):
-                result = resolve_target_and_find_best_grna(organism, gene, st.session_state.user_email)
+                results = resolve_target_and_rank_grnas(organism, gene, st.session_state.user_email, top_n=5)
                 
-                if isinstance(result, dict):
-                    st.success("Target Successfully Identified!")
-                    st.metric("Top Candidate Score", f"{result['score']}/100")
+                if isinstance(results, list):
+                    st.success(f"Successfully identified and ranked top {len(results)} targets!")
                     
-                    st.subheader("Candidate Details")
-                    st.code(f"gRNA Sequence (20bp): {result['grna']}\nPAM Locus:           {result['pam']}", language="text")
+                    top_guide = results[0]
+                    st.metric("Top Candidate Score", f"{top_guide['Score']}/100")
                     
-                    st.write(f"**NCBI Accession:** `{result['accession']}`")
-                    st.write(f"**GC Content:** `{result['gc_content']:.1f}%`")
-                    st.write(f"**Biophysical Assessment:** {', '.join(result['flags'])}")
+                    st.subheader("Top Candidate Leaderboard")
+                    st.dataframe(results, use_container_width=True)
                 else:
-                    st.error(result)
+                    st.error(results)
 
     # --- FEATURE 2: COMPARATIVE DNA ALIGNMENT ---
     elif app_mode == "Comparative DNA Alignment":
@@ -300,7 +279,3 @@ else:
                     st.progress(similarity / 100)
                 else:
                     st.error(f"Error retrieving sequences: {acc1 if not seq1 else acc2}")
-
-    # -------------------------------------------------------------
-    # 👇 ADD NEW FRONTEND INTERFACES BELOW THIS LINE USING `elif app_mode == "..."`
-    # -------------------------------------------------------------
