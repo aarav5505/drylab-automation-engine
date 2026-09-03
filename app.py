@@ -3,7 +3,7 @@ from Bio import Entrez
 import re
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="VectaIQ | Genomic Suite", page_icon="🧬")
+st.set_page_config(page_title="Pamoros | Genomic Suite", page_icon="🧬")
 
 # --- INITIALIZE SESSION STATE ---
 if "user_authenticated" not in st.session_state:
@@ -127,12 +127,12 @@ def compare_dna_sequences(seq1, seq2):
 # ==========================================
 
 if not st.session_state.user_authenticated:
-    st.title("🧬 Welcome to VectaIQ")
-    st.write("Enter your email address to authenticate NCBI API requests before using the engine.")
+    st.title("🧬 Welcome to Pamoros")
+    st.write("Enter your email address to authenticate NCBI API requests before using the platform.")
     
     email_input = st.text_input("User Email Address", placeholder="researcher@university.edu")
     
-    if st.button("Authenticate & Enter Engine"):
+    if st.button("Authenticate & Enter Platform"):
         if email_input and "@" in email_input and "." in email_input:
             st.session_state.user_authenticated = True
             st.session_state.user_email = email_input
@@ -152,7 +152,7 @@ else:
     # 👇 ADD NEW FEATURE NAMES TO THIS LIST FOR SIDEBAR SELECTION
     # -------------------------------------------------------------
     app_mode = st.sidebar.radio(
-        "Select Platform Feature:",
+        "Select Feature:",
         [
             "CRISPR gRNA Discovery", 
             "Comparative DNA Alignment"
@@ -167,7 +167,7 @@ else:
 
     # --- FEATURE 1: CRISPR DISCOVERY ENGINE ---
     if app_mode == "CRISPR gRNA Discovery":
-        st.title("🧬 VectaIQ: CRISPR-Cas9 gRNA Discovery Engine")
+        st.title("🧬 CRISPR-Cas9 gRNA Discovery Engine")
         st.write("Automated sequence retrieval, PAM site scanning, and candidate scoring.")
 
         col1, col2 = st.columns(2)
@@ -195,7 +195,7 @@ else:
 
     # --- FEATURE 2: COMPARATIVE DNA ALIGNMENT ---
     elif app_mode == "Comparative DNA Alignment":
-        st.title("📊 VectaIQ: Comparative DNA Alignment")
+        st.title("📊 Comparative DNA Alignment")
         st.write("Compare genetic sequence similarity across species. Leave the gene keyword blank to run a broad genome-level correlation.")
 
         col1, col2 = st.columns(2)
